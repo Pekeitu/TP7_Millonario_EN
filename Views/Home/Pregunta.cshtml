@@ -1,0 +1,272 @@
+<body>
+    <!-- Modal para comprobar si el jugador ya existia previamente, y confirmar si se quiere recargar el usuario o empezar de cero -->
+    <div class="modal" tabindex="-1" role="dialog" id="LugarSeguro">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <p>You answered the safe question. Do you wish to withdraw?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Continue</button>
+                    <button type="button" class="btn btn-secondary" onclick="finalizarJuego(true)" data-bs-dismiss="modal">Withdraw</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para el doble chance -->
+    <div class="modal" tabindex="-1" role="dialog" id="DobleChanceActivado">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <p>You choose an incorrect option. The double chance wildcard has been activated.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Accept</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fondo-->
+    <img class="position-absolute fixed-top start-0 vw-100 vh-100" style="z-index: -1;" id="fondo" src="https://fotografias.antena3.com/clipping/cmsimages02/2020/01/10/ABE9B428-C9D0-4676-80E0-D1E512848828/57.jpg">
+
+    <div id="LogoYPregunta" class="vh-100 d-inline-flex flex-column justify-content-center align-items-center">
+        <img class="w-50 h-auto" style="margin-top: -5%" id="logoQQSM" src="/image/QQSMLogo.png">
+        
+        <!-- Pregunta -->
+        <div id="TextoPregunta" class="pt-1 pb-1 pl-2 pr-2 mt-3 mb-3 text-center rounded-pill">
+            @ViewBag.Pregunta.txtPregunta
+        </div>
+
+        <!-- Respuestas -->
+        <div class="row">
+            @for(int i = 0; i < @ViewBag.Respuestas.Count; i++)
+            {
+                @if(i > 0 && (i % 2) == 0)
+                {
+                    <div class="w-100 mb-1"></div>
+                }
+
+                <div class="d-flex col justify-content-center">
+                    <button id="opcionRespuesta-@i" class="w-100 btn btn-info text-center" value=@ViewBag.Respuestas[i].opcionRespuesta onclick="checkRespuesta(this.value)">
+                        @ViewBag.Respuestas[i].opcionRespuesta. @ViewBag.Respuestas[i].txtRespuesta
+                    </button>
+                </div>
+            }
+        </div>
+
+        <div class="d-flex justify-content-center align-items-center mt-5 pt-3">
+            <button class="mr-2 border-0 bg-transparent" onclick="comodin50()">
+                <img id="logoComodin50" style="background-color: transparent; height: 80px; width: 80px;" src="/image/Comodin50.png">
+            </button>
+
+            <button class="mr-2 border-0 bg-transparent" onclick="comodinDobleChance(true)" disabled>
+                <img id="logoComodinDobleChance" style="height: 80px; width: 80px;" src="/image/ComodinDobleChance.png">
+            </button>
+
+            <button class="border-0 bg-transparent" onclick="comodinSaltear()">
+                <img id="logoComodinSaltear" style="height: 80px; width: 80px;" src="/image/ComodinSaltear.png">
+            </button>
+        </div>
+
+    </div>
+    <!-- Pozo-->
+    <div class="vh-100 d-inline-flex flex-column justify-content-center align-items-center float-right bg-transparent">
+        @for(int i = 0; i < @ViewBag.ListaPozo.Count; i++)
+        {
+            /* Posta que me encantaria extrapolar los colores a una funcion en js o algo del estilo para no tener que repetir como tremendo hdp */
+            /* pero no se me ocurre como hacerlo, y todavia tengo que terminar comodines y qcy. quizas despues lo piense un rato mas*/
+            @if(i == @ViewBag.PosPozo)
+            {
+                <div id="entradaPozo-@i" class="entradaPozo container bg-warning rounded-pill mb-1 text-center">
+                    @ViewBag.ListaPozo[i].importe
+                </div>
+            } else if(i < @ViewBag.PosPozo) {
+                <div id="entradaPozo-@i" class="entradaPozo container bg-success rounded-pill mb-1 text-center">
+                    @ViewBag.ListaPozo[i].importe
+                </div>
+            } else if(@ViewBag.ListaPozo[i].valorSeguro) {
+                <div id="entradaPozo-@i" class="entradaPozo container bg-primary rounded-pill mb-1 text-center">
+                    @ViewBag.ListaPozo[i].importe
+                </div>
+            } else {
+                <div id="entradaPozo-@i" class="entradaPozo container bg-light rounded-pill mb-1 text-center">
+                    @ViewBag.ListaPozo[i].importe
+                </div>
+            }
+        }
+    </div>
+    <script>
+        function checkRespuesta(value)
+        {
+            //AJAX al action comprobarRespuesta
+            $.ajax({
+                type: 'POST',
+                dataType: "JSON",
+                url: '@Url.Action("comprobarRespuesta", "Home")',
+                data: { Opcion: value },
+                success:
+                    function (data) {
+                        if(data.correcta) cargarSiguientePregunta(data);
+                        else
+                        {
+                            var resp = comodinDobleChance(false);
+                            if(resp == false) finalizarJuego(false);
+                        }
+                    }
+            })
+        }
+
+        function cargarSiguientePregunta(data) {
+            $.ajax({
+                type: 'POST',
+                url: '@Url.Action("CargarSiguientePreguntaAjax", "Home")',
+                success:
+                    function (response) {
+                        if(response.pregunta == null)
+                        {
+                            finalizarJuego(true);
+                            return;
+                        }
+
+                        if(data.pozoSeguro == true)
+                        {
+                            var myModal = new bootstrap.Modal(document.getElementById('LugarSeguro'), {
+                                keyboard: false
+                            });
+
+                            myModal.show();
+                        }
+
+                        document.getElementById('TextoPregunta').innerText = response.pregunta.txtPregunta;
+
+                        //Randomizar el orden de las respuestas porque... porque no?
+                        shuffle(response.respuestas);
+                        for(var i = 0; i < response.respuestas.length; i++)
+                        {
+                            var searchButton = "opcionRespuesta-".concat(i.toString());
+                            document.getElementById(searchButton).innerHTML = String.fromCharCode(65 + i) + ". " + response.respuestas[i].txtRespuesta;
+                            document.getElementById(searchButton).value = response.respuestas[i].opcionRespuesta;
+                            document.getElementById(searchButton).disabled = false;
+                        }
+
+                        //Poner la entrada actual con color verde 
+                        var searchPozo = "entradaPozo-".concat(response.posPozo.toString());
+                        var elementoPozo = document.getElementById(searchPozo);
+                        elementoPozo.classList.remove('entradaPozo');
+                        elementoPozo.classList.remove('bg-warning');
+                        elementoPozo.classList.add('bg-success');
+
+                        //Poner la proxima entrada con color naranja
+                        searchPozo = "entradaPozo-".concat((response.posPozo + 1).toString());
+                        elementoPozo = document.getElementById(searchPozo);
+                        if(elementoPozo.classList.contains('bg-primary')) elementoPozo.classList.remove('bg-primary');
+                        else if(elementoPozo.classList.contains('bg-light')) elementoPozo.classList.remove('bg-light');
+                        elementoPozo.classList.add('bg-warning');
+                    }
+            })
+        }
+
+        function comodin50()
+        {
+            document.getElementById('logoComodin50').src = "/image/Comodin50Usado.png";
+            $.ajax({
+                type: 'POST',
+                dataType: 'JSON',
+                url: '@Url.Action("comodin", "Home")',
+                data: { type: "50" },
+                success:
+                    function(response)
+                    {
+                        if(response == null) return;
+
+                        response.forEach(function(item, index){
+                            const opcionRespuesta = document.querySelector("button[value=" + item + "]");
+                            opcionRespuesta.disabled = true;
+                        });
+                    }
+            })
+        }
+
+        //Data: si el usuario voluntariamente toco doble chance o no
+        function comodinDobleChance(data)
+        {
+            document.getElementById('logoComodinDobleChance').src = "/image/ComodinDobleChanceUsado.png";
+
+            var retVal = false;
+            $.ajax({
+                type: 'POST',
+                dataType: 'JSON',
+                url: '@Url.Action("comodin", "Home")',
+                async : false,
+                data: { type: "dc" },
+                success:
+                    function(response)
+                    {
+                        if(response == null || response == false) { retVal = false; return; }
+                        if(data == false)
+                        {
+                            var myModal = new bootstrap.Modal(document.getElementById('DobleChanceActivado'), {
+                                keyboard: false
+                            });
+
+                            myModal.show();
+                        }
+                        retVal = true;
+                        return;
+                    }
+
+            })
+            return retVal;
+        }
+
+        function comodinSaltear()
+        {
+            document.getElementById('logoComodinSaltear').src = "/image/ComodinSaltearUsado.png";
+
+            $.ajax({
+                type: 'POST',
+                dataType: 'JSON',
+                url: '@Url.Action("comodin", "Home")',
+                data: { type: "sp" },
+                success:
+                    function(response)
+                    {
+                        if(response == null) return;
+                        if(response.saltearPosible == false) return;
+                        cargarSiguientePregunta(response);
+                    }
+
+            })
+        }
+
+        function finalizarJuego(exitOnWin){
+            if(exitOnWin)
+            {
+                $.ajax({
+                    type: 'POST',
+                    url: '@Url.Action("GuardarJugadorAjax", "Home")',
+                    success:
+                        function(response) {
+                            return;
+                        }
+                })
+            }
+            window.location = '@Url.Action("PantallaFinDelJuego", "Home")';
+            
+        }
+
+        //Creditos: https://stackoverflow.com/questions/6274339/how-can-i-shuffle-an-array
+        function shuffle(a) {
+            var j, x, i;
+            for (i = a.length - 1; i > 0; i--) {
+                j = Math.floor(Math.random() * (i + 1));
+                x = a[i];
+                a[i] = a[j];
+                a[j] = x;
+            }
+            return a;
+        }
+    </script>
+</body>
